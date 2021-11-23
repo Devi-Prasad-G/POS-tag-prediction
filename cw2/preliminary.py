@@ -1,7 +1,9 @@
 import argparse
 
 from utils.helper import read_jsonl, get_classification_report
+from collections import defaultdict, OrderedDict
 
+tags_count = defaultdict(int)
 
 def train(data_path):
     """Train most-frequent-tag baseline.
@@ -14,22 +16,27 @@ def train(data_path):
     """
     print('> Training model on dataset', data_path)
     sample_count = 0
-
+    d = defaultdict()
     for sample in read_jsonl(data_path):
         sample_count += 1
         tokens = sample['tokens']
         tags = sample['tags']
-
-        '''
-        YOUR CODE HERE
-        '''
+        for tag in tags:
+            if tag in tags_count:
+                    tags_count[tag]+=1
+            else:
+                    tags_count[tag]=1
+        for token,tag in zip(tokens,tags):
+            if token in d.keys():
+                d[token][tag] += 1
+            else:
+                d[token] = defaultdict(int)
+                d[token][tag] = 1
 
     '''
     Set model model params to be a dictionary with tag frequency counts
     '''
-    model_params = {
-        # YOUR CODE HERE
-    }
+    model_params = d
 
     print(f'> Finished training on {sample_count} samples')
     return lambda x: predict(x, model_params)
@@ -51,9 +58,14 @@ def predict_tag(token, params):
     '''
     YOUR CODE HERE
     '''
-
-    pass # return tag_pred, tag_count
-
+    max_value = max(tags_count.values())  # maximum value
+    max_keys = [k for k, v in tags_count.items() if v == max_value]
+    if token in params.keys():
+        val = params[token]
+        val_sorted = OrderedDict(sorted(val.items(), key=lambda kv: kv[1], reverse=True))
+        return list(val_sorted.items())[0]
+    else:
+        return (max_keys[0],0)
 
 def predict(x, params):
     """Predict tags for inputs `x`, using learned parameters `params`.
