@@ -4,3 +4,4 @@ __ds_store__
 .DS_store
 *.pkl
 __pycache__
+models
