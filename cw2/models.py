@@ -9,7 +9,7 @@ from tokenizers import normalizers
 from tokenizers.normalizers import NFD, StripAccents
 
 
-COMBINATION_CHOICES = ['NONE', 'REDUCE_MEAN', 'REDUCE_MAX', 
+COMBINATION_CHOICES = ['NONE', 'REDUCE_MEAN', 'REDUCE_MAX',
                        'REDUCE_SUM', 'FIRST_TOKEN', 'LAST_TOKEN']
 
 
@@ -37,9 +37,9 @@ def combine_vectors(vectors, combination_type):
         return vectors
 
 
-def get_model(contextual=False, combination='REDUCE_MEAN', use_spacy=True, 
+def get_model(contextual=False, combination='REDUCE_MEAN', use_spacy=True,
               transformer_model='roberta-base'):
-    
+
     if use_spacy or contextual is False:
         if contextual:
             gpu = spacy.prefer_gpu()
@@ -56,7 +56,7 @@ def get_model(contextual=False, combination='REDUCE_MEAN', use_spacy=True,
 
         print('> Loaded model:', spacy_model_name)
         return model, None
-        
+
     else:
         print(f'> Loading {transformer_model} tokenizer...')
         tokenizer = AutoTokenizer.from_pretrained(transformer_model, add_special_tokens=True)
@@ -70,7 +70,7 @@ def get_model(contextual=False, combination='REDUCE_MEAN', use_spacy=True,
 
 def is_tokenization_consistent(chunk, doc, tags):
         doc_tokens = [token.text for token in doc]
-        
+
         if doc_tokens != chunk or len(doc_tokens) != len(tags):
             return False
 
@@ -85,7 +85,7 @@ def is_tokenization_consistent(chunk, doc, tags):
 def get_embeddings_spacy(model, chunk, tags):
     # Use predefined tokenization from dataset. For details, see
     # https://spacy.io/usage/linguistic-features#tokenization
-    # An interesting discussion about tokenization trade-offs here: 
+    # An interesting discussion about tokenization trade-offs here:
     # https://github.com/explosion/spaCy/issues/2011#issuecomment-367865510
     def custom_tokenizer(text):
         return Doc(model.vocab, words=chunk)
@@ -105,7 +105,7 @@ def get_embeddings_spacy(model, chunk, tags):
             print('Document:', doc)
             # print('Chunk:', len(chunk), chunk)
             continue
-        
+
         # print(token.vector.shape, doc.tensor.shape)
         embeddings.append(token.vector)
 
@@ -114,7 +114,6 @@ def get_embeddings_spacy(model, chunk, tags):
 
 def get_token_embeddings(embeddings, input_tokens, tokenized_text, combination_type):
     token_embeddings = []
-    
     try:
         align = Alignment.from_strings(input_tokens, tokenized_text)
     except ValueError as err:
@@ -122,7 +121,7 @@ def get_token_embeddings(embeddings, input_tokens, tokenized_text, combination_t
         # print('tokenized_text:', tokenized_text)
         # print('input tokens:', input_tokens)
         return []
-    
+
     token_start_idx = 1
     for length in align.x2y.lengths:
         if length == 0:
@@ -143,10 +142,10 @@ def get_embeddings_spacy_contextual(model, input_tokens, tags, combination_type)
     # more info here: https://huggingface.co/docs/tokenizers/python/latest/pipeline.html
     normalizer = normalizers.Sequence([NFD(), StripAccents()])
     tokens = [normalizer.normalize_str(token) for token in input_tokens]
-    
+
     # Use predefined tokenization from dataset. For details, see
     # https://spacy.io/usage/linguistic-features#tokenization
-    # An interesting discussion about tokenization trade-offs here: 
+    # An interesting discussion about tokenization trade-offs here:
     # https://github.com/explosion/spaCy/issues/2011#issuecomment-367865510
     def custom_tokenizer(text):
         return Doc(model.vocab, words=tokens)
@@ -162,7 +161,7 @@ def get_embeddings_spacy_contextual(model, input_tokens, tags, combination_type)
     tokenized_text = doc._.trf_data.tokens['input_texts'][0]
     tokenized_text = [token.replace('Ġ', '') for token in tokenized_text if token not in ['<s>', '</s>']]
     embeddings = doc._.trf_data.tensors[0][0]
-    
+
     return get_token_embeddings(embeddings, tokens, tokenized_text, combination_type)
 
 
@@ -173,14 +172,14 @@ def get_embeddings_huggingface(model, tokenizer, input_tokens, combination_type,
     tokens = [normalizer.normalize_str(token) for token in input_tokens]
 
     text = ' '.join(tokens)
-    
+
     # Tokenize our sentence with the BERT tokenizer.
     inputs = tokenizer.encode_plus(text, return_tensors="pt")
-    
+
     with torch.no_grad():
         outputs = model(**inputs)
         hidden_states = outputs[2]
-    
+
     # stack representations from all layers
     embeddings = torch.stack(hidden_states, dim=0)
     # remove batch dimension
@@ -189,9 +188,9 @@ def get_embeddings_huggingface(model, tokenizer, input_tokens, combination_type,
     embeddings = embeddings.permute(1,0,2)
     # choose layer. Also could be a combination of layers.
     embeddings = embeddings[:,layer, :]
-    
+
     tokenized_text = tokenizer.convert_ids_to_tokens(inputs['input_ids'][0], skip_special_tokens=True)
     # tokenized_text = [token.replace('##', '') for token in tokenized_text]
     tokenized_text = [token.replace('Ġ', '') for token in tokenized_text]
-    
+
     return get_token_embeddings(embeddings, tokens, tokenized_text, combination_type)

@@ -8,7 +8,7 @@ from utils.helper import read_jsonl
 from models import get_embeddings_spacy_contextual, get_model
 from models import get_embeddings_huggingface, get_embeddings_spacy
 from models import COMBINATION_CHOICES
-        
+
 
 def get_dataset_embeddings(source_path, model, max_tokens=145, tokenizer=None, combination='REDUCE_MEAN'):
 
@@ -20,7 +20,7 @@ def get_dataset_embeddings(source_path, model, max_tokens=145, tokenizer=None, c
         text = text.replace('…', '...')
         text = text.replace('♥', ' ')
         return text
-     
+
     def chunks(tokens, n, tags=None):
         if tags:
             for i in range(0, len(tokens), n):
@@ -29,10 +29,10 @@ def get_dataset_embeddings(source_path, model, max_tokens=145, tokenizer=None, c
             for i in range(0, len(tokens), n):
                 yield tokens[i:i+n], None
 
-    embeddings, labels = [], []
+    embeddings, labels, exported_chunks, ctx_chunks = [], [], [], []
 
     print('> Extracting embeddings for dataset', source_path)
-    
+
     for sample in tqdm(read_jsonl(source_path)):
         gold_tokens = sample['tokens']
         gold_tags = sample['tags']
@@ -44,10 +44,9 @@ def get_dataset_embeddings(source_path, model, max_tokens=145, tokenizer=None, c
             text_chunks, tag_chunks = [gold_tokens], [gold_tags]
 
         for chunk, tags in zip(text_chunks, tag_chunks):
-
             chunk = [fix_symbols(tok) for tok in chunk]
             chunk = [tok for tok in chunk if len(tok.strip()) > 0]
-            
+
             if tokenizer:
                 sample_embeds = get_embeddings_huggingface(model, tokenizer, chunk, combination)
             elif combination:
@@ -60,10 +59,13 @@ def get_dataset_embeddings(source_path, model, max_tokens=145, tokenizer=None, c
                 continue
             embeddings.extend(sample_embeds)
             labels.extend(tags)
-            
-        
+            exported_chunks.extend(chunk)
+            for i in range(len(chunk)):
+                ctx_chunks.append(chunk[max(0, i-5):i + 5])
+
+
     # save processed split of corpus, with matrix of number_samples x features, list of labels
-    corpus = [np.vstack(embeddings), labels]
+    corpus = [np.vstack(embeddings), labels, exported_chunks, ctx_chunks]
 
     # print number of entities found in each section for information
     print("> Processed {} tokens".format(len(corpus[0])))
@@ -73,7 +75,7 @@ def get_dataset_embeddings(source_path, model, max_tokens=145, tokenizer=None, c
 
 def save_embeddings(target_path=None, contextual=False, combination='REDUCE_MEAN'):
     model, tokenizer = get_model(contextual=contextual, combination=combination, use_spacy=False)
-    
+
     source_paths = [
         ('TRAINING', 'data/en_ewt-ud-train.json'),
         ('VALIDATION', 'data/en_ewt-ud-dev.json'),
@@ -112,4 +114,3 @@ if __name__ == '__main__':
 
 # Usage
 # python embedding.py --contextual --combination REDUCE_MEAN
-    

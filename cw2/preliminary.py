@@ -99,7 +99,7 @@ def predict(x, params):
     return preds
 
 
-def evaluate(model, data_path):
+def evaluate(model, data_path, known_words=[]):
     """Evaluate model performance on a dataset
 
     Args:
@@ -108,25 +108,41 @@ def evaluate(model, data_path):
     """
     predictions = []
     labels = []
+    words_known = []
 
     print('> Evaluating model on dataset', data_path)
 
     for sample in read_jsonl(data_path):
         sample_preds = model([sample['tokens']])[0]
+        words_known.extend(
+            [token in known_words for token in sample['tokens']])
 
         for pred, tag in zip(sample_preds, sample['tags']):
             predictions.append(pred[1])
             labels.append(tag)
 
+    preds_unknown = [pred for i, pred
+                     in enumerate(predictions)
+                     if words_known[i] is False]
+    labels_unknown = [label for i, label
+                      in enumerate(labels)
+                      if words_known[i] is False]
+
     print()
     print("Full classification report:")
-    report = get_classification_report(labels, predictions, zero_division=0, digits=3)
+    report = get_classification_report(labels, predictions,
+                                       zero_division=0, digits=4, name="all")
     print(report)
 
     print("\nClassification report for top tag classes (PLEASE REPORT THIS ONE):")
-    report = get_classification_report(labels, predictions, zero_division=0, digits=3, top_k=6)
+    report = get_classification_report(labels, predictions,
+                                       zero_division=0, digits=4, top_k=6, name="top6")
     print(report)
 
+    print("\nClassification report for unknown words:")
+    report = get_classification_report(preds_unknown, labels_unknown,
+                                       zero_division=0, digits=4, name="unknownwords")
+    print(report)
 
 def check_samples(model):
     """Check the model predictions
@@ -148,11 +164,14 @@ def check_samples(model):
 
 def run(train_path, validation_path):
     print()
+    known_words = set()
+    for sample in read_jsonl(train_path):
+        known_words.update(sample['tokens'])
     model = train(train_path)
     check_samples(model)
 
     if validation_path:
-        evaluate(model, validation_path)
+        evaluate(model, validation_path, known_words=known_words)
 
 
 if __name__ == '__main__':
